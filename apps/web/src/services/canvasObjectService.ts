@@ -8,6 +8,7 @@ import {
   Triangle
 } from 'fabric';
 
+import { removeBackgroundWithApi } from './apiClient';
 import type {
   ObjectStylePatch,
   TextStylePatch
@@ -110,7 +111,6 @@ async function addImageObjectFromFile(canvas: Canvas, file: File): Promise<void>
     URL.revokeObjectURL(fileUrl);
   }
 }
-
 
 async function addImageObjectFromDataUrl(canvas: Canvas, dataUrl: string): Promise<void> {
   /**
@@ -286,6 +286,41 @@ async function removeLightBackgroundFromImage(canvas: Canvas): Promise<void> {
   canvas.requestRenderAll();
 }
 
+async function removeBackgroundFromActiveImageWithFallback(canvas: Canvas): Promise<void> {
+  /**
+   * var: canvas
+   * type: Canvas
+   * desc: Removes image background via API first and local fallback on failure.
+   */
+  const activeObject = canvas.getActiveObject();
+  if (!(activeObject instanceof FabricImage)) {
+    throw new Error('Select an image first to remove the background.');
+  }
+  const imageDataUrl = activeObject.toDataURL();
+  try {
+    const response = await removeBackgroundWithApi(imageDataUrl);
+    if (!response?.processedImageDataUrl) {
+      throw new Error('Background API returned invalid payload.');
+    }
+    const processed = await FabricImage.fromURL(response.processedImageDataUrl, {
+      crossOrigin: 'anonymous'
+    });
+    processed.set({
+      angle: activeObject.angle,
+      left: activeObject.left,
+      scaleX: activeObject.scaleX,
+      scaleY: activeObject.scaleY,
+      top: activeObject.top
+    });
+    canvas.remove(activeObject);
+    canvas.add(processed);
+    canvas.setActiveObject(processed);
+    canvas.requestRenderAll();
+  } catch {
+    await removeLightBackgroundFromImage(canvas);
+  }
+}
+
 export {
   addCircleObject,
   addImageObjectFromDataUrl,
@@ -296,6 +331,7 @@ export {
   applyObjectStyleToSelection,
   applyTextStyleToObject,
   duplicateActiveObject,
+  removeBackgroundFromActiveImageWithFallback,
   removeLightBackgroundFromImage,
   setSelectionLock,
   setSelectionZIndex

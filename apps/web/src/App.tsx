@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
 
 import ErrorBoundary from './components/common/ErrorBoundary';
-import HomePage from './components/home/HomePage';
 import CanvasEditor from './components/editor/CanvasEditor';
-import Sidebar from './components/sidebar/Sidebar';
+import HomePage from './components/home/HomePage';
+import LayersPanel from './components/sidebar/LayersPanel';
 import PropertiesPanel from './components/sidebar/PropertiesPanel';
+import Sidebar from './components/sidebar/Sidebar';
 import Toolbar from './components/toolbar/Toolbar';
+import { openProjectById } from './services/projectService';
+import { buildTemplateProject, listTemplates } from './services/templateService';
 import type {
   CanvasActions,
   EditorSnapshot,
@@ -20,7 +23,15 @@ const DEFAULT_STATUS: EditorStatus = {
 };
 
 const DEFAULT_SNAPSHOT: EditorSnapshot = {
+  activePageId: 'page-1',
   layers: [],
+  project: {
+    id: 'project-1',
+    name: 'Untitled design',
+    pages: [{ id: 'page-1', name: 'Page 1', objects: [] }],
+    updatedAt: new Date().toISOString(),
+    version: 1
+  },
   selection: {
     activeGroup: null,
     activeObject: null,
@@ -134,6 +145,32 @@ function App(): JSX.Element {
       message: 'Loaded your previous design.',
       state: 'success'
     });
+    openProjectById(designId);
+  };
+
+  const handleOpenTemplate = (templateId: string): void => {
+    /**
+     * var: templateId
+     * type: string
+     * desc: Template identifier selected from home templates tab.
+     */
+    const templateProject = buildTemplateProject(templateId);
+    setActiveDesignId(templateProject.id);
+    setDesigns((previous) => [
+      {
+        dataUrl: '',
+        id: templateProject.id,
+        kind: 'image',
+        name: templateProject.name,
+        updatedAt: templateProject.updatedAt
+      },
+      ...previous
+    ]);
+    setView('editor');
+    setStatus({
+      message: 'Template opened in editor.',
+      state: 'success'
+    });
   };
 
   const handleUploadAsset = async (file: File): Promise<void> => {
@@ -164,7 +201,14 @@ function App(): JSX.Element {
   if (view === 'home') {
     return (
       <ErrorBoundary>
-        <HomePage designs={designs} onCreateDesign={handleCreateDesign} onOpenDesign={handleOpenDesign} onUploadAsset={handleUploadAsset} />
+        <HomePage
+          designs={designs}
+          onCreateDesign={handleCreateDesign}
+          onOpenDesign={handleOpenDesign}
+          onOpenTemplate={handleOpenTemplate}
+          onUploadAsset={handleUploadAsset}
+          templates={listTemplates()}
+        />
       </ErrorBoundary>
     );
   }
@@ -177,7 +221,10 @@ function App(): JSX.Element {
         <div className="content">
           <Sidebar />
           <CanvasEditor initialDesign={activeDesign} onActionsChange={setActions} onSnapshotChange={setSnapshot} onStatusChange={setStatus} />
-          <PropertiesPanel actions={actions} snapshot={snapshot} />
+          <div className="right-column">
+            <PropertiesPanel actions={actions} snapshot={snapshot} />
+            <LayersPanel actions={actions} snapshot={snapshot} />
+          </div>
         </div>
       </div>
     </ErrorBoundary>

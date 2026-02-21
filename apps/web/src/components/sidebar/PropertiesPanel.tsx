@@ -45,48 +45,21 @@ function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
    */
   const panelState = useMemo(() => mapPanelState(props.snapshot), [props.snapshot]);
 
-  const handleFill = (event: ChangeEvent<HTMLInputElement>): void => {
+  const applyNumberStyle = (event: ChangeEvent<HTMLInputElement>, field: 'fontSize' | 'letterSpacing' | 'lineHeight' | 'rotation'): void => {
     /**
      * var: event
      * type: ChangeEvent<HTMLInputElement>
-     * desc: Color input event used to update active object fill.
+     * desc: Numeric input event used for text/object numeric controls.
+     * var: field
+     * type: 'fontSize' | 'letterSpacing' | 'lineHeight' | 'rotation'
+     * desc: Target style field to update.
      */
-    props.actions?.applyObjectStyle({
-      fill: event.target.value
-    });
-  };
-
-  const handleOpacity = (event: ChangeEvent<HTMLInputElement>): void => {
-    /**
-     * var: event
-     * type: ChangeEvent<HTMLInputElement>
-     * desc: Range input event used to set active object opacity.
-     */
-    props.actions?.applyObjectStyle({
-      opacity: Number(event.target.value)
-    });
-  };
-
-  const handleFontSize = (event: ChangeEvent<HTMLInputElement>): void => {
-    /**
-     * var: event
-     * type: ChangeEvent<HTMLInputElement>
-     * desc: Number input event used to change active text font size.
-     */
-    props.actions?.applyTextStyle({
-      fontSize: Number(event.target.value)
-    });
-  };
-
-  const handleFontFamily = (event: ChangeEvent<HTMLSelectElement>): void => {
-    /**
-     * var: event
-     * type: ChangeEvent<HTMLSelectElement>
-     * desc: Select input event used to set active text font family.
-     */
-    props.actions?.applyTextStyle({
-      fontFamily: event.target.value
-    });
+    const value = Number(event.target.value);
+    if (field === 'rotation') {
+      props.actions?.applyObjectStyle({ rotation: value });
+      return;
+    }
+    props.actions?.applyTextStyle({ [field]: value });
   };
 
   return (
@@ -94,15 +67,15 @@ function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
       <h3>Design Controls</h3>
       <div className="property-group">
         <label htmlFor="fillColor">Fill</label>
-        <input id="fillColor" onChange={handleFill} type="color" value={panelState.fill} />
+        <input id="fillColor" onChange={(event) => props.actions?.applyObjectStyle({ fill: event.target.value })} type="color" value={panelState.fill} />
       </div>
       <div className="property-group">
         <label htmlFor="opacityRange">Opacity</label>
-        <input id="opacityRange" max="1" min="0.1" onChange={handleOpacity} step="0.05" type="range" value={panelState.opacity} />
+        <input id="opacityRange" max="1" min="0.1" onChange={(event) => props.actions?.applyObjectStyle({ opacity: Number(event.target.value) })} step="0.05" type="range" value={panelState.opacity} />
       </div>
       <div className="property-group">
         <label htmlFor="fontFamily">Font</label>
-        <select id="fontFamily" onChange={handleFontFamily} value={panelState.fontFamily}>
+        <select id="fontFamily" onChange={(event) => props.actions?.applyTextStyle({ fontFamily: event.target.value })} value={panelState.fontFamily}>
           <option value="Open Sans">Open Sans</option>
           <option value="Poppins">Poppins</option>
           <option value="Inter">Inter</option>
@@ -111,12 +84,37 @@ function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
       </div>
       <div className="property-group">
         <label htmlFor="fontSize">Font size</label>
-        <input id="fontSize" min="8" onChange={handleFontSize} type="number" value={panelState.fontSize} />
+        <input id="fontSize" min="8" onChange={(event) => applyNumberStyle(event, 'fontSize')} type="number" value={panelState.fontSize} />
+      </div>
+      <div className="property-group">
+        <label htmlFor="lineHeight">Line height</label>
+        <input id="lineHeight" min="0.8" onChange={(event) => applyNumberStyle(event, 'lineHeight')} step="0.1" type="number" value={Number(props.snapshot.selection.activeObject?.get('lineHeight') ?? 1.2)} />
+      </div>
+      <div className="property-group">
+        <label htmlFor="letterSpacing">Letter spacing</label>
+        <input id="letterSpacing" min="0" onChange={(event) => applyNumberStyle(event, 'letterSpacing')} step="1" type="number" value={Number(props.snapshot.selection.activeObject?.get('charSpacing') ?? 0)} />
+      </div>
+      <div className="property-group">
+        <label htmlFor="rotation">Rotation</label>
+        <input id="rotation" onChange={(event) => applyNumberStyle(event, 'rotation')} step="1" type="number" value={Number(props.snapshot.selection.activeObject?.angle ?? 0)} />
       </div>
       <div className="inline-actions">
         <button onClick={() => props.actions?.applyTextStyle({ fontWeight: panelState.isBold ? 'normal' : 'bold' })} type="button">Bold</button>
         <button onClick={() => props.actions?.applyTextStyle({ fontStyle: panelState.isItalic ? 'normal' : 'italic' })} type="button">Italic</button>
         <button onClick={() => props.actions?.applyTextStyle({ underline: !panelState.isUnderline })} type="button">Underline</button>
+        <button onClick={() => props.actions?.applyTextStyle({ strikethrough: !Boolean(props.snapshot.selection.activeObject?.get('linethrough')) })} type="button">Strike</button>
+      </div>
+      <div className="inline-actions">
+        <button onClick={() => props.actions?.applyTextStyle({ align: 'left' })} type="button">Left</button>
+        <button onClick={() => props.actions?.applyTextStyle({ align: 'center' })} type="button">Center</button>
+        <button onClick={() => props.actions?.applyTextStyle({ align: 'right' })} type="button">Right</button>
+        <button onClick={() => props.actions?.applyTextStyle({ align: 'justify' })} type="button">Justify</button>
+      </div>
+      <div className="inline-actions">
+        <button onClick={() => props.actions?.applyTextStyle({ textTransform: 'uppercase' })} type="button">Upper</button>
+        <button onClick={() => props.actions?.applyTextStyle({ textTransform: 'lowercase' })} type="button">Lower</button>
+        <button onClick={() => props.actions?.applyObjectStyle({ lockAspectRatio: true })} type="button">Lock ratio</button>
+        <button onClick={() => props.actions?.applyObjectStyle({ lockAspectRatio: false })} type="button">Unlock ratio</button>
       </div>
       <div className="inline-actions">
         <button onClick={() => props.actions?.bringToFront()} type="button">To front</button>
@@ -129,16 +127,7 @@ function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
         <button onClick={() => props.actions?.lockSelection()} type="button">Lock</button>
         <button onClick={() => props.actions?.unlockSelection()} type="button">Unlock</button>
       </div>
-      <button className="button-primary" onClick={() => props.actions?.removeBackgroundFromActiveImage()} type="button">Remove BG (quick)</button>
-      <h3>Layers</h3>
-      <div className="layers-list">
-        {props.snapshot.layers.map((layer) => (
-          <div className="layer-item" key={layer.id}>
-            <span>{layer.label}</span>
-            <span>{layer.isLocked ? '🔒' : '🔓'}</span>
-          </div>
-        ))}
-      </div>
+      <button className="button-primary" onClick={() => props.actions?.removeBackgroundFromActiveImage()} type="button">Remove BG (API)</button>
     </aside>
   );
 }

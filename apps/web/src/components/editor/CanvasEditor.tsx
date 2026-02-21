@@ -9,6 +9,7 @@ import {
 import {
   ChangeEvent,
   DragEvent,
+  KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -26,7 +27,7 @@ import {
   applyObjectStyleToSelection,
   applyTextStyleToObject,
   duplicateActiveObject,
-  removeLightBackgroundFromImage,
+  removeBackgroundFromActiveImageWithFallback,
   setSelectionLock,
   setSelectionZIndex
 } from '../../services/canvasObjectService';
@@ -36,6 +37,8 @@ import {
   triggerDownload
 } from '../../services/exportService';
 import { importSvgToGroup } from '../../services/svgImportService';
+import { editorStore } from '../../store/editorStore';
+import { historyStore, useHistorySnapshot } from '../../store/historyStore';
 import type {
   CanvasActions,
   EditorSelection,
@@ -70,8 +73,9 @@ function buildLayerItems(canvas: Canvas): LayerItem[] {
   return canvas.getObjects().map((object, index) => {
     const objectType = object.type ?? 'object';
     return {
-      id: `${objectType}-${index}`,
+      id: String(object.get('id') ?? `${objectType}-${index}`),
       isLocked: Boolean(object.lockMovementX || object.lockMovementY || !object.selectable),
+      isVisible: object.visible !== false,
       label: `${objectType} ${index + 1}`,
       type: objectType
     };
@@ -89,7 +93,10 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
   const svgInputRef = useRef<HTMLInputElement | null>(null);
   const [isDropActive, setIsDropActive] = useState<boolean>(false);
   const [selection, setSelection] = useState<EditorSelection>(EMPTY_SELECTION);
+  const [pages, setPages] = useState<string[]>(['page-1']);
+  const [activePageId, setActivePageId] = useState<string>('page-1');
   const lastLoadedDesignRef = useRef<string | null>(null);
+  const history = useHistorySnapshot();
 
   const emitSnapshot = useCallback((nextSelection: EditorSelection): void => {
     /**
@@ -102,12 +109,14 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       return;
     }
     props.onSnapshotChange({
+      activePageId,
       layers: buildLayerItems(canvas),
+      project: editorStore.getSnapshot().project,
       selection: nextSelection
     });
-  }, [props]);
+  }, [activePageId, props]);
 
-  const updateSelectionFromActiveObject = useCallback((activeObject: FabricObject | null): void => {
+  const syncSelection = useCallback((activeObject: FabricObject | null): void => {
     /**
      * var: activeObject
      * type: FabricObject | null
@@ -120,18 +129,9 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       isEditingGroup: Boolean(groupCandidate && activeObject && groupCandidate !== activeObject)
     };
     setSelection(nextSelection);
+    editorStore.select(nextSelection);
     emitSnapshot(nextSelection);
   }, [emitSnapshot]);
-
-  const handleSelectionEvent = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Synchronizes local selection state from current Fabric active object.
-     */
-    const canvas = fabricCanvasRef.current;
-    updateSelectionFromActiveObject((canvas?.getActiveObject() as FabricObject | null) ?? null);
-  }, [updateSelectionFromActiveObject]);
 
   const resetSelection = useCallback((): void => {
     /**
@@ -140,6 +140,7 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
      * desc: Clears selected object and group state.
      */
     setSelection(EMPTY_SELECTION);
+    editorStore.select(EMPTY_SELECTION);
     emitSnapshot(EMPTY_SELECTION);
   }, [emitSnapshot]);
 
@@ -153,9 +154,13 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     if (!canvas || !selection.activeObject) {
       return;
     }
+    const objectId = String(selection.activeObject.get('id') ?? '');
     canvas.remove(selection.activeObject);
     canvas.discardActiveObject();
     canvas.requestRenderAll();
+    if (objectId) {
+      editorStore.deleteObject(objectId);
+    }
     resetSelection();
   }, [resetSelection, selection.activeObject]);
 
@@ -179,6 +184,13 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     });
     activeObject.setCoords();
     canvas.requestRenderAll();
+    const objectId = String(activeObject.get('id') ?? '');
+    if (objectId) {
+      editorStore.updateObject(objectId, {
+        x: activeObject.left ?? 0,
+        y: activeObject.top ?? 0
+      });
+    }
     emitSnapshot(selection);
   }, [emitSnapshot, selection]);
 
@@ -210,44 +222,6 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     emitSnapshot(selection);
   }, [emitSnapshot, selection]);
 
-  const enterGroupEditMode = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Focuses first child of selected group for child-level editing.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !selection.activeGroup) {
-      return;
-    }
-    const child = selection.activeGroup.getObjects()[0] ?? null;
-    if (!child) {
-      props.onStatusChange({
-        message: buildErrorNotification('Malformed group structure: no editable child elements.'),
-        state: 'error'
-      });
-      return;
-    }
-    canvas.setActiveObject(child);
-    updateSelectionFromActiveObject(child);
-    canvas.requestRenderAll();
-  }, [props, selection.activeGroup, updateSelectionFromActiveObject]);
-
-  const exitGroupEditMode = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Restores selected group focus from child-level editing mode.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !selection.activeGroup) {
-      return;
-    }
-    canvas.setActiveObject(selection.activeGroup);
-    updateSelectionFromActiveObject(selection.activeGroup);
-    canvas.requestRenderAll();
-  }, [selection.activeGroup, updateSelectionFromActiveObject]);
-
   const importSvgFromFile = useCallback(async (file: File): Promise<void> => {
     /**
      * var: file
@@ -260,11 +234,24 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     }
     const svgPayload = await file.text();
     const importedResult = await importSvgToGroup(svgPayload);
+    importedResult.rootGroup.set('id', `object-${Date.now()}`);
     canvas.add(importedResult.rootGroup);
     canvas.setActiveObject(importedResult.rootGroup);
-    updateSelectionFromActiveObject(importedResult.rootGroup);
+    syncSelection(importedResult.rootGroup);
+    editorStore.addProjectObject({
+      data: {
+        imported: true
+      },
+      id: String(importedResult.rootGroup.get('id')),
+      kind: 'svg-group',
+      layer: canvas.getObjects().length,
+      locked: false,
+      visible: true,
+      x: importedResult.rootGroup.left ?? 0,
+      y: importedResult.rootGroup.top ?? 0
+    });
     canvas.requestRenderAll();
-  }, [updateSelectionFromActiveObject]);
+  }, [syncSelection]);
 
   const importDroppedFile = useCallback(async (file: File): Promise<void> => {
     /**
@@ -285,7 +272,23 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
           throw new Error('Canvas is not initialized.');
         }
         await addImageObjectFromFile(canvas, file);
-        emitSnapshot(selection);
+        const active = canvas.getActiveObject() as FabricObject | null;
+        active?.set('id', `object-${Date.now()}`);
+        if (active) {
+          syncSelection(active);
+          editorStore.addProjectObject({
+            data: {
+              fileName: file.name
+            },
+            id: String(active.get('id')),
+            kind: 'image',
+            layer: canvas.getObjects().length,
+            locked: false,
+            visible: true,
+            x: active.left ?? 0,
+            y: active.top ?? 0
+          });
+        }
       } else {
         throw new Error('Unsupported file format. Use SVG or image files.');
       }
@@ -299,7 +302,7 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
         state: 'error'
       });
     }
-  }, [emitSnapshot, importSvgFromFile, props, selection]);
+  }, [importSvgFromFile, props, syncSelection]);
 
   const exportSvg = useCallback(async (): Promise<void> => {
     /**
@@ -336,13 +339,13 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     /**
      * var: none
      * type: void
-     * desc: Applies simple bright-background transparency to selected image.
+     * desc: Applies API-backed background removal with fallback.
      */
     const canvas = fabricCanvasRef.current;
     if (!canvas) {
       throw new Error('Canvas is not initialized.');
     }
-    await removeLightBackgroundFromImage(canvas);
+    await removeBackgroundFromActiveImageWithFallback(canvas);
     emitSnapshot(selection);
   }, [emitSnapshot, selection]);
 
@@ -357,8 +360,8 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       return;
     }
     await duplicateActiveObject(canvas);
-    updateSelectionFromActiveObject(canvas.getActiveObject() as FabricObject | null);
-  }, [updateSelectionFromActiveObject]);
+    syncSelection(canvas.getActiveObject() as FabricObject | null);
+  }, [syncSelection]);
 
   const lockSelection = useCallback((): void => {
     /**
@@ -388,61 +391,50 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     emitSnapshot(selection);
   }, [emitSnapshot, selection]);
 
-  const bringToFront = useCallback((): void => {
+  const setLayerDirection = useCallback((direction: 'back' | 'backward' | 'forward' | 'front'): void => {
     /**
-     * var: none
-     * type: void
-     * desc: Moves selected object to top of stack.
+     * var: direction
+     * type: 'back' | 'backward' | 'forward' | 'front'
+     * desc: Layer movement direction for selected object.
      */
     const canvas = fabricCanvasRef.current;
     if (!canvas) {
       return;
     }
-    setSelectionZIndex(canvas, 'front');
+    setSelectionZIndex(canvas, direction);
     emitSnapshot(selection);
   }, [emitSnapshot, selection]);
 
-  const bringForward = useCallback((): void => {
+  const handleEditorKeyboard = useCallback((event: KeyboardEvent<HTMLElement>): void => {
     /**
-     * var: none
-     * type: void
-     * desc: Moves selected object one step forward.
+     * var: event
+     * type: KeyboardEvent<HTMLElement>
+     * desc: Keyboard shortcuts handling for delete, history, and nudging actions.
      */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) {
-      return;
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      removeSelection();
     }
-    setSelectionZIndex(canvas, 'forward');
-    emitSnapshot(selection);
-  }, [emitSnapshot, selection]);
-
-  const sendToBack = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Moves selected object to back of stack.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) {
-      return;
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      void historyStore.redo();
+    } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      void historyStore.undo();
     }
-    setSelectionZIndex(canvas, 'back');
-    emitSnapshot(selection);
-  }, [emitSnapshot, selection]);
-
-  const sendBackward = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Moves selected object one step backward.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) {
-      return;
+    if (event.key === 'ArrowUp') {
+      moveSelection(0, -1);
     }
-    setSelectionZIndex(canvas, 'backward');
-    emitSnapshot(selection);
-  }, [emitSnapshot, selection]);
+    if (event.key === 'ArrowDown') {
+      moveSelection(0, 1);
+    }
+    if (event.key === 'ArrowLeft') {
+      moveSelection(-1, 0);
+    }
+    if (event.key === 'ArrowRight') {
+      moveSelection(1, 0);
+    }
+  }, [moveSelection, removeSelection]);
 
   useEffect(() => {
     const node = canvasElementRef.current;
@@ -472,11 +464,12 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       top: 80,
       width: 640
     });
+    pageSurface.set('id', 'page-surface');
     canvas.add(pageSurface);
     canvas.setActiveObject(pageSurface);
-    updateSelectionFromActiveObject(pageSurface);
-    canvas.on('selection:created', handleSelectionEvent);
-    canvas.on('selection:updated', handleSelectionEvent);
+    syncSelection(pageSurface);
+    canvas.on('selection:created', () => syncSelection(canvas.getActiveObject() as FabricObject | null));
+    canvas.on('selection:updated', () => syncSelection(canvas.getActiveObject() as FabricObject | null));
     canvas.on('selection:cleared', resetSelection);
     fabricCanvasRef.current = canvas;
     emitSnapshot({
@@ -489,8 +482,7 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       fabricCanvasRef.current = null;
       props.onActionsChange(null);
     };
-  }, [emitSnapshot, handleSelectionEvent, props, resetSelection, updateSelectionFromActiveObject]);
-
+  }, [emitSnapshot, props, resetSelection, syncSelection]);
 
   useEffect(() => {
     const loadInitialDesign = async (): Promise<void> => {
@@ -511,12 +503,15 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
         if (props.initialDesign.kind === 'svg') {
           const decoded = atob(props.initialDesign.dataUrl.split(',')[1] ?? '');
           const imported = await importSvgToGroup(decoded);
+          imported.rootGroup.set('id', `object-${Date.now()}`);
           canvas.add(imported.rootGroup);
           canvas.setActiveObject(imported.rootGroup);
-          updateSelectionFromActiveObject(imported.rootGroup);
+          syncSelection(imported.rootGroup);
         } else {
           await addImageObjectFromDataUrl(canvas, props.initialDesign.dataUrl);
-          updateSelectionFromActiveObject(canvas.getActiveObject() as FabricObject | null);
+          const active = canvas.getActiveObject() as FabricObject | null;
+          active?.set('id', `object-${Date.now()}`);
+          syncSelection(active);
         }
         canvas.requestRenderAll();
       } catch (error) {
@@ -527,7 +522,26 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       }
     };
     void loadInitialDesign();
-  }, [props.initialDesign, props.onStatusChange, updateSelectionFromActiveObject]);
+  }, [props.initialDesign, props.onStatusChange, syncSelection]);
+
+
+  const selectLayer = useCallback((layerId: string): void => {
+    /**
+     * var: layerId
+     * type: string
+     * desc: Layer identifier used to set active Fabric object by id.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    const target = canvas.getObjects().find((object) => String(object.get('id') ?? '') === layerId) ?? null;
+    if (!target) {
+      return;
+    }
+    canvas.setActiveObject(target);
+    syncSelection(target);
+  }, [syncSelection]);
 
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
@@ -535,18 +549,56 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       return;
     }
     const actions: CanvasActions = {
-      addCircle: () => addCircleObject(canvas),
-      addImageFromFile: (file: File) => addImageObjectFromFile(canvas, file),
-      addRect: () => addRectObject(canvas),
-      addText: () => addTextObject(canvas),
-      addTriangle: () => addTriangleObject(canvas),
+      addCircle: () => {
+        addCircleObject(canvas);
+        syncSelection(canvas.getActiveObject() as FabricObject | null);
+      },
+      addImageFromFile: async (file: File) => {
+        await addImageObjectFromFile(canvas, file);
+        syncSelection(canvas.getActiveObject() as FabricObject | null);
+      },
+      addPage: () => {
+        editorStore.addPage();
+        const nextId = `page-${pages.length + 1}`;
+        setPages((previous) => [...previous, nextId]);
+        setActivePageId(nextId);
+      },
+      addRect: () => {
+        addRectObject(canvas);
+        syncSelection(canvas.getActiveObject() as FabricObject | null);
+      },
+      addText: () => {
+        addTextObject(canvas);
+        syncSelection(canvas.getActiveObject() as FabricObject | null);
+      },
+      addTriangle: () => {
+        addTriangleObject(canvas);
+        syncSelection(canvas.getActiveObject() as FabricObject | null);
+      },
       applyObjectStyle,
       applyTextStyle,
-      bringForward,
-      bringToFront,
+      bringForward: () => setLayerDirection('forward'),
+      bringToFront: () => setLayerDirection('front'),
       duplicateSelection,
-      enterGroupEditMode,
-      exitGroupEditMode,
+      enterGroupEditMode: () => {
+        const group = selection.activeGroup;
+        if (!group) {
+          return;
+        }
+        const child = group.getObjects()[0];
+        if (!child) {
+          return;
+        }
+        canvas.setActiveObject(child);
+        syncSelection(child);
+      },
+      exitGroupEditMode: () => {
+        if (!selection.activeGroup) {
+          return;
+        }
+        canvas.setActiveObject(selection.activeGroup);
+        syncSelection(selection.activeGroup);
+      },
       exportPng,
       exportSvg,
       importSvgFromFile,
@@ -555,12 +607,17 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       removeBackgroundFromActiveImage,
       removeSelection,
       selection: () => selection,
-      sendBackward,
-      sendToBack,
+      sendBackward: () => setLayerDirection('backward'),
+      selectLayer,
+      sendToBack: () => setLayerDirection('back'),
+      setPage: (pageId: string) => {
+        setActivePageId(pageId);
+        editorStore.setPage(pageId);
+      },
       unlockSelection
     };
     props.onActionsChange(actions);
-  }, [applyObjectStyle, applyTextStyle, bringForward, bringToFront, duplicateSelection, enterGroupEditMode, exitGroupEditMode, exportPng, exportSvg, importSvgFromFile, lockSelection, moveSelection, props, removeBackgroundFromActiveImage, removeSelection, selection, sendBackward, sendToBack, unlockSelection]);
+  }, [applyObjectStyle, applyTextStyle, duplicateSelection, exportPng, exportSvg, importSvgFromFile, lockSelection, moveSelection, pages.length, props, removeBackgroundFromActiveImage, removeSelection, selectLayer, selection, setLayerDirection, syncSelection, unlockSelection]);
 
   const handleSvgImportInput = useCallback(async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     /**
@@ -574,40 +631,6 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     }
     await importDroppedFile(file);
     event.target.value = '';
-  }, [importDroppedFile]);
-
-  const handleDragOver = useCallback((event: DragEvent<HTMLElement>): void => {
-    /**
-     * var: event
-     * type: DragEvent<HTMLElement>
-     * desc: Drag over event used to activate drop styling and allow drops.
-     */
-    event.preventDefault();
-    setIsDropActive(true);
-  }, []);
-
-  const handleDragLeave = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Resets drag state when pointer leaves drop zone.
-     */
-    setIsDropActive(false);
-  }, []);
-
-  const handleDrop = useCallback(async (event: DragEvent<HTMLElement>): Promise<void> => {
-    /**
-     * var: event
-     * type: DragEvent<HTMLElement>
-     * desc: Drop event that extracts first file and imports it into canvas.
-     */
-    event.preventDefault();
-    setIsDropActive(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (!file) {
-      return;
-    }
-    await importDroppedFile(file);
   }, [importDroppedFile]);
 
   const selectionLabel = useMemo((): string => {
@@ -632,13 +655,38 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
   }, [selection.activeGroup, selection.activeObject]);
 
   return (
-    <section className="editor-panel" onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
+    <section
+      className="editor-panel"
+      onDragLeave={() => setIsDropActive(false)}
+      onDragOver={(event: DragEvent<HTMLElement>) => {
+        event.preventDefault();
+        setIsDropActive(true);
+      }}
+      onDrop={async (event: DragEvent<HTMLElement>) => {
+        event.preventDefault();
+        setIsDropActive(false);
+        const file = event.dataTransfer.files?.[0] ?? null;
+        if (file) {
+          await importDroppedFile(file);
+        }
+      }}
+      onKeyDown={handleEditorKeyboard}
+      tabIndex={0}
+    >
       <div className="editor-topbar">
-        <h2>Canvas Workspace</h2>
+        <h2>Canvas Workspace · {activePageId}</h2>
         <div className="editor-topbar-actions">
           <button className="button-primary" onClick={() => svgInputRef.current?.click()} type="button">Import SVG</button>
+          <button onClick={() => historyStore.undo()} type="button">Undo {history.canUndo ? '●' : ''}</button>
+          <button onClick={() => historyStore.redo()} type="button">Redo {history.canRedo ? '●' : ''}</button>
+          <button onClick={() => setPages((prev) => [...prev, `page-${prev.length + 1}`])} type="button">Add Page</button>
           <input accept=".svg,image/svg+xml" hidden onChange={handleSvgImportInput} ref={svgInputRef} type="file" />
         </div>
+      </div>
+      <div className="editor-pages">
+        {pages.map((pageId) => (
+          <button className={pageId === activePageId ? 'active-page-button' : ''} key={pageId} onClick={() => setActivePageId(pageId)} type="button">{pageId}</button>
+        ))}
       </div>
       <div className={`canvas-dropzone ${isDropActive ? 'active' : ''}`}>
         <p>{isDropActive ? 'Drop file to import' : 'Drag and drop SVG or image files here'}</p>
@@ -646,8 +694,39 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
         <canvas ref={canvasElementRef} />
       </div>
       <div className="editor-toolbar">
-        <button disabled={!selection.activeGroup || selection.isEditingGroup} onClick={enterGroupEditMode} type="button">Edit group</button>
-        <button disabled={!selection.activeGroup || !selection.isEditingGroup} onClick={exitGroupEditMode} type="button">Exit edit</button>
+        <button
+          disabled={!selection.activeGroup || selection.isEditingGroup}
+          onClick={() => {
+            const group = selection.activeGroup;
+            if (!group) {
+              return;
+            }
+            const child = group.getObjects()[0] ?? null;
+            if (!child) {
+              return;
+            }
+            const canvas = fabricCanvasRef.current;
+            canvas?.setActiveObject(child);
+            syncSelection(child);
+          }}
+          type="button"
+        >
+          Edit group
+        </button>
+        <button
+          disabled={!selection.activeGroup || !selection.isEditingGroup}
+          onClick={() => {
+            if (!selection.activeGroup) {
+              return;
+            }
+            const canvas = fabricCanvasRef.current;
+            canvas?.setActiveObject(selection.activeGroup);
+            syncSelection(selection.activeGroup);
+          }}
+          type="button"
+        >
+          Exit edit
+        </button>
         <button disabled={!selection.activeObject} onClick={removeSelection} type="button">Delete</button>
         <button disabled={!selection.activeObject} onClick={() => moveSelection(-10, 0)} type="button">←</button>
         <button disabled={!selection.activeObject} onClick={() => moveSelection(10, 0)} type="button">→</button>

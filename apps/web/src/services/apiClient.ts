@@ -1,6 +1,10 @@
 const API_BASE_URL = 'http://localhost:4000';
 
-async function getHealth() {
+type RemoveBackgroundResponse = {
+  processedImageDataUrl: string;
+};
+
+async function getHealth(): Promise<Record<string, string>> {
   /**
    * var: none
    * type: void
@@ -10,7 +14,7 @@ async function getHealth() {
   return response.json();
 }
 
-async function removeBackgroundWithApi(imageDataUrl) {
+async function removeBackgroundWithApi(imageDataUrl: string): Promise<RemoveBackgroundResponse> {
   /**
    * var: imageDataUrl
    * type: string

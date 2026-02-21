@@ -1,16 +1,26 @@
 import {
   ChangeEvent,
   RefObject,
-  useRef
+  useMemo,
+  useRef,
+  useState
 } from 'react';
 
 import type { StoredDesign } from '../../types/editor';
+
+type TemplateDescriptor = {
+  category: string;
+  id: string;
+  name: string;
+};
 
 type HomePageProps = {
   designs: StoredDesign[];
   onCreateDesign: () => void;
   onOpenDesign: (designId: string) => void;
+  onOpenTemplate: (templateId: string) => void;
   onUploadAsset: (file: File) => Promise<void>;
+  templates: TemplateDescriptor[];
 };
 
 const DESIGN_CATEGORIES = [
@@ -35,6 +45,26 @@ function HomePage(props: HomePageProps): JSX.Element {
    * desc: Handlers and persistent design data required for the home workspace.
    */
   const uploadInputRef: RefObject<HTMLInputElement> = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState<string>('');
+  const [tab, setTab] = useState<'recent' | 'templates'>('recent');
+
+  const filteredDesigns = useMemo((): StoredDesign[] => {
+    /**
+     * var: none
+     * type: void
+     * desc: Filters stored design cards using active home search query.
+     */
+    return props.designs.filter((design) => design.name.toLowerCase().includes(query.toLowerCase()));
+  }, [props.designs, query]);
+
+  const filteredTemplates = useMemo((): TemplateDescriptor[] => {
+    /**
+     * var: none
+     * type: void
+     * desc: Filters template cards using active home search query.
+     */
+    return props.templates.filter((template) => template.name.toLowerCase().includes(query.toLowerCase()));
+  }, [props.templates, query]);
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     /**
@@ -63,11 +93,11 @@ function HomePage(props: HomePageProps): JSX.Element {
         <div className="home-hero">
           <h1>What do you want to edit today?</h1>
           <div className="home-chip-row">
-            <button className="home-chip active" type="button">Your designs</button>
-            <button className="home-chip" type="button">Templates</button>
+            <button className={`home-chip ${tab === 'recent' ? 'active' : ''}`} onClick={() => setTab('recent')} type="button">Recent designs</button>
+            <button className={`home-chip ${tab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')} type="button">Templates</button>
             <button className="home-chip" type="button">Open Canva AI</button>
           </div>
-          <div className="home-search">Search designs, folders and uploads</div>
+          <input className="home-search" onChange={(event) => setQuery(event.target.value)} placeholder="Search designs, folders and uploads" type="text" value={query} />
           <div className="home-category-row">
             {DESIGN_CATEGORIES.map((category) => (
               <button className="home-category" key={category} onClick={props.onCreateDesign} type="button">{category}</button>
@@ -75,15 +105,21 @@ function HomePage(props: HomePageProps): JSX.Element {
           </div>
         </div>
         <div className="home-section-header">
-          <h2>Your designs</h2>
+          <h2>{tab === 'recent' ? 'Your designs' : 'Template gallery'}</h2>
           <button className="button-primary" onClick={() => uploadInputRef.current?.click()} type="button">Upload</button>
           <input accept=".svg,image/*" hidden onChange={handleUpload} ref={uploadInputRef} type="file" />
         </div>
         <div className="home-design-grid">
-          {props.designs.map((design) => (
+          {tab === 'recent' && filteredDesigns.map((design) => (
             <button className="home-design-card" key={design.id} onClick={() => props.onOpenDesign(design.id)} type="button">
               <div className="home-design-preview">{design.kind.toUpperCase()}</div>
               <p>{design.name}</p>
+            </button>
+          ))}
+          {tab === 'templates' && filteredTemplates.map((template) => (
+            <button className="home-design-card" key={template.id} onClick={() => props.onOpenTemplate(template.id)} type="button">
+              <div className="home-design-preview">{template.category}</div>
+              <p>{template.name}</p>
             </button>
           ))}
         </div>
