@@ -6,6 +6,7 @@ import {
 } from 'fabric';
 import {
   ChangeEvent,
+  DragEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -52,6 +53,8 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
    */
   const canvasElementRef = useRef<HTMLCanvasElement | null>(null);
   const fabricCanvasRef = useRef<Canvas | null>(null);
+  const svgInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDropActive, setIsDropActive] = useState<boolean>(false);
   const [selection, setSelection] = useState<EditorSelection>(EMPTY_SELECTION);
 
   const updateSelectionFromActiveObject = useCallback((activeObject: FabricObject | null): void => {
@@ -181,6 +184,40 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     canvas.requestRenderAll();
   }, [updateSelectionFromActiveObject]);
 
+  const importDroppedFile = useCallback(async (file: File): Promise<void> => {
+    /**
+     * var: file
+     * type: File
+     * desc: File dropped over canvas, routed to SVG or image import path.
+     */
+    props.onStatusChange({
+      message: 'Importing dropped file...',
+      state: 'loading'
+    });
+    try {
+      if (file.type.includes('svg') || file.name.toLowerCase().endsWith('.svg')) {
+        await importSvgFromFile(file);
+      } else if (file.type.startsWith('image/')) {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) {
+          throw new Error('Canvas is not initialized.');
+        }
+        await addImageObjectFromFile(canvas, file);
+      } else {
+        throw new Error('Unsupported file format. Use SVG or image files.');
+      }
+      props.onStatusChange({
+        message: 'File imported successfully.',
+        state: 'success'
+      });
+    } catch (error) {
+      props.onStatusChange({
+        message: buildErrorNotification(error instanceof Error ? error.message : 'Import failed.'),
+        state: 'error'
+      });
+    }
+  }, [importSvgFromFile, props]);
+
   const exportSvg = useCallback(async (): Promise<void> => {
     /**
      * var: none
@@ -281,25 +318,43 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
     if (!file) {
       return;
     }
-    props.onStatusChange({
-      message: 'Importing SVG...',
-      state: 'loading'
-    });
-    try {
-      await importSvgFromFile(file);
-      props.onStatusChange({
-        message: 'SVG imported successfully.',
-        state: 'success'
-      });
-    } catch (error) {
-      props.onStatusChange({
-        message: buildErrorNotification(error instanceof Error ? error.message : 'Unknown SVG import error.'),
-        state: 'error'
-      });
-    } finally {
-      event.target.value = '';
+    await importDroppedFile(file);
+    event.target.value = '';
+  }, [importDroppedFile]);
+
+  const handleDragOver = useCallback((event: DragEvent<HTMLElement>): void => {
+    /**
+     * var: event
+     * type: DragEvent<HTMLElement>
+     * desc: Drag over event used to activate drop styling and allow drops.
+     */
+    event.preventDefault();
+    setIsDropActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((): void => {
+    /**
+     * var: none
+     * type: void
+     * desc: Resets drag state when pointer leaves drop zone.
+     */
+    setIsDropActive(false);
+  }, []);
+
+  const handleDrop = useCallback(async (event: DragEvent<HTMLElement>): Promise<void> => {
+    /**
+     * var: event
+     * type: DragEvent<HTMLElement>
+     * desc: Drop event that extracts first file and imports it into canvas.
+     */
+    event.preventDefault();
+    setIsDropActive(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    if (!file) {
+      return;
     }
-  }, [importSvgFromFile, props]);
+    await importDroppedFile(file);
+  }, [importDroppedFile]);
 
   const selectionLabel = useMemo((): string => {
     /**
@@ -320,9 +375,20 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
   }, [selection.activeGroup, selection.activeObject]);
 
   return (
-    <section className="editor-panel">
+    <section className="editor-panel" onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
+      <div className="editor-topbar">
+        <h2>Canvas Workspace</h2>
+        <div>
+          <button className="button-primary" onClick={() => svgInputRef.current?.click()} type="button">Import SVG</button>
+          <input accept=".svg,image/svg+xml" hidden onChange={handleSvgImportInput} ref={svgInputRef} type="file" />
+        </div>
+      </div>
+      <div className={`canvas-dropzone ${isDropActive ? 'active' : ''}`}>
+        <p>{isDropActive ? 'Drop file to import' : 'Drag and drop SVG or image files here'}</p>
+        <p className="editor-status">{selectionLabel}</p>
+        <canvas ref={canvasElementRef} />
+      </div>
       <div className="editor-toolbar">
-        <input accept=".svg,image/svg+xml" onChange={handleSvgImportInput} type="file" />
         <button disabled={!selection.activeGroup || selection.isEditingGroup} onClick={enterGroupEditMode} type="button">Edit group</button>
         <button disabled={!selection.activeGroup || !selection.isEditingGroup} onClick={exitGroupEditMode} type="button">Exit edit</button>
         <button disabled={!selection.activeObject} onClick={removeSelection} type="button">Delete</button>
@@ -331,8 +397,6 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
         <button disabled={!selection.activeObject} onClick={() => moveSelection(0, -10)} type="button">↑</button>
         <button disabled={!selection.activeObject} onClick={() => moveSelection(0, 10)} type="button">↓</button>
       </div>
-      <p className="editor-status">{selectionLabel}</p>
-      <canvas ref={canvasElementRef} />
     </section>
   );
 }

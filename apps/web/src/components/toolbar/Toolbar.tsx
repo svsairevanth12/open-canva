@@ -21,6 +21,7 @@ function Toolbar(props: ToolbarProps): JSX.Element {
    * desc: Toolbar action providers and shared status update callback.
    */
   const imageInputRef: RefObject<HTMLInputElement> = useRef<HTMLInputElement>(null);
+  const svgInputRef: RefObject<HTMLInputElement> = useRef<HTMLInputElement>(null);
 
   const runSyncAction = (action: () => void, successMessage: string): void => {
     /**
@@ -95,17 +96,38 @@ function Toolbar(props: ToolbarProps): JSX.Element {
     event.target.value = '';
   };
 
+  const handleSvgInput = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    /**
+     * var: event
+     * type: ChangeEvent<HTMLInputElement>
+     * desc: File input event containing uploaded SVG payload.
+     */
+    const file = event.target.files?.[0] ?? null;
+    if (!file || !props.actions) {
+      return;
+    }
+    await runAsyncAction(() => props.actions!.importSvgFromFile(file), 'Importing SVG...', 'SVG imported.');
+    event.target.value = '';
+  };
+
   return (
     <header className="toolbar">
+      <div className="toolbar-brand">
+        <div className="brand-dot" />
+        <strong>Open Canva</strong>
+      </div>
       <div className="toolbar-grid">
-        <button onClick={() => runSyncAction(() => props.actions?.addText(), 'Text added.')} type="button">Add text</button>
-        <button onClick={() => runSyncAction(() => props.actions?.addRect(), 'Rectangle added.')} type="button">Add rect</button>
-        <button onClick={() => runSyncAction(() => props.actions?.addCircle(), 'Circle added.')} type="button">Add circle</button>
-        <button onClick={() => runSyncAction(() => props.actions?.addTriangle(), 'Triangle added.')} type="button">Add triangle</button>
-        <button onClick={() => imageInputRef.current?.click()} type="button">Add image</button>
+        <button className="button-primary" onClick={() => svgInputRef.current?.click()} type="button">Upload SVG</button>
+        <button onClick={() => runSyncAction(() => props.actions?.addText(), 'Text added.')} type="button">Text</button>
+        <button onClick={() => runSyncAction(() => props.actions?.addRect(), 'Rectangle added.')} type="button">Rect</button>
+        <button onClick={() => runSyncAction(() => props.actions?.addCircle(), 'Circle added.')} type="button">Circle</button>
+        <button onClick={() => runSyncAction(() => props.actions?.addTriangle(), 'Triangle added.')} type="button">Triangle</button>
+        <button onClick={() => imageInputRef.current?.click()} type="button">Image</button>
         <button onClick={() => runAsyncAction(() => props.actions?.exportSvg() ?? Promise.resolve(), 'Exporting SVG...', 'SVG exported.')} type="button">Export SVG</button>
         <button onClick={() => runAsyncAction(() => props.actions?.exportPng() ?? Promise.resolve(), 'Exporting PNG...', 'PNG exported.')} type="button">Export PNG</button>
+        <button className="button-primary" onClick={() => runSyncAction(() => props.actions?.addRect(), 'New page layer added.')} type="button">Add Page</button>
       </div>
+      <input accept=".svg,image/svg+xml" hidden onChange={handleSvgInput} ref={svgInputRef} type="file" />
       <input accept="image/*" hidden onChange={handleImageInput} ref={imageInputRef} type="file" />
     </header>
   );
