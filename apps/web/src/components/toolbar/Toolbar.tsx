@@ -11,6 +11,7 @@ import type {
 
 type ToolbarProps = {
   actions: CanvasActions | null;
+  onGoHome: () => void;
   onStatusChange: (status: EditorStatus) => void;
 };
 
@@ -115,6 +116,7 @@ function Toolbar(props: ToolbarProps): JSX.Element {
       <div className="toolbar-brand">
         <div className="brand-dot" />
         <strong>Open Canva</strong>
+        <button onClick={props.onGoHome} type="button">Home</button>
       </div>
       <div className="toolbar-grid">
         <button className="button-primary" onClick={() => svgInputRef.current?.click()} type="button">Upload SVG</button>

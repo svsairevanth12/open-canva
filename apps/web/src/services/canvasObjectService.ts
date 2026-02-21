@@ -111,6 +111,29 @@ async function addImageObjectFromFile(canvas: Canvas, file: File): Promise<void>
   }
 }
 
+
+async function addImageObjectFromDataUrl(canvas: Canvas, dataUrl: string): Promise<void> {
+  /**
+   * var: canvas
+   * type: Canvas
+   * desc: Fabric canvas receiving a new image object from data URL.
+   * var: dataUrl
+   * type: string
+   * desc: Encoded image payload persisted from previous uploads.
+   */
+  const image = await FabricImage.fromURL(dataUrl, {
+    crossOrigin: 'anonymous'
+  });
+  image.set({
+    left: 200,
+    top: 120
+  });
+  image.scaleToWidth(260);
+  canvas.add(image);
+  canvas.setActiveObject(image);
+  canvas.requestRenderAll();
+}
+
 function applyTextStyleToObject(canvas: Canvas, style: TextStylePatch): void {
   /**
    * var: canvas
@@ -265,6 +288,7 @@ async function removeLightBackgroundFromImage(canvas: Canvas): Promise<void> {
 
 export {
   addCircleObject,
+  addImageObjectFromDataUrl,
   addImageObjectFromFile,
   addRectObject,
   addTextObject,

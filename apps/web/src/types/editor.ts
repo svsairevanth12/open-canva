@@ -41,6 +41,17 @@ type EditorSnapshot = {
   selection: EditorSelection;
 };
 
+
+type StoredDesignKind = 'image' | 'svg';
+
+type StoredDesign = {
+  dataUrl: string;
+  id: string;
+  kind: StoredDesignKind;
+  name: string;
+  updatedAt: string;
+};
+
 type TextStylePatch = {
   fontFamily?: string;
   fontSize?: number;
@@ -106,5 +117,7 @@ export type {
   LayerItem,
   ObjectStylePatch,
   PropertyPanelState,
+  StoredDesign,
+  StoredDesignKind,
   TextStylePatch
 };

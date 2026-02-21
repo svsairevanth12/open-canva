@@ -18,6 +18,7 @@ import {
 
 import {
   addCircleObject,
+  addImageObjectFromDataUrl,
   addImageObjectFromFile,
   addRectObject,
   addTextObject,
@@ -42,11 +43,13 @@ import type {
   EditorStatus,
   LayerItem,
   ObjectStylePatch,
+  StoredDesign,
   TextStylePatch
 } from '../../types/editor';
 import { buildErrorNotification } from '../../utils/notifications';
 
 type CanvasEditorProps = {
+  initialDesign: StoredDesign | null;
   onActionsChange: (actions: CanvasActions | null) => void;
   onSnapshotChange: (snapshot: EditorSnapshot) => void;
   onStatusChange: (status: EditorStatus) => void;
@@ -86,6 +89,7 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
   const svgInputRef = useRef<HTMLInputElement | null>(null);
   const [isDropActive, setIsDropActive] = useState<boolean>(false);
   const [selection, setSelection] = useState<EditorSelection>(EMPTY_SELECTION);
+  const lastLoadedDesignRef = useRef<string | null>(null);
 
   const emitSnapshot = useCallback((nextSelection: EditorSelection): void => {
     /**
@@ -486,6 +490,44 @@ function CanvasEditor(props: CanvasEditorProps): JSX.Element {
       props.onActionsChange(null);
     };
   }, [emitSnapshot, handleSelectionEvent, props, resetSelection, updateSelectionFromActiveObject]);
+
+
+  useEffect(() => {
+    const loadInitialDesign = async (): Promise<void> => {
+      /**
+       * var: none
+       * type: void
+       * desc: Loads persisted uploaded asset into canvas when editor opens from home page.
+       */
+      const canvas = fabricCanvasRef.current;
+      if (!canvas || !props.initialDesign) {
+        return;
+      }
+      if (lastLoadedDesignRef.current === props.initialDesign.id) {
+        return;
+      }
+      lastLoadedDesignRef.current = props.initialDesign.id;
+      try {
+        if (props.initialDesign.kind === 'svg') {
+          const decoded = atob(props.initialDesign.dataUrl.split(',')[1] ?? '');
+          const imported = await importSvgToGroup(decoded);
+          canvas.add(imported.rootGroup);
+          canvas.setActiveObject(imported.rootGroup);
+          updateSelectionFromActiveObject(imported.rootGroup);
+        } else {
+          await addImageObjectFromDataUrl(canvas, props.initialDesign.dataUrl);
+          updateSelectionFromActiveObject(canvas.getActiveObject() as FabricObject | null);
+        }
+        canvas.requestRenderAll();
+      } catch (error) {
+        props.onStatusChange({
+          message: buildErrorNotification(error instanceof Error ? error.message : 'Failed to load selected design.'),
+          state: 'error'
+        });
+      }
+    };
+    void loadInitialDesign();
+  }, [props.initialDesign, props.onStatusChange, updateSelectionFromActiveObject]);
 
   useEffect(() => {
     const canvas = fabricCanvasRef.current;

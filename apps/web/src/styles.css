@@ -247,3 +247,136 @@ button:hover {
 button:disabled {
   opacity: 0.45;
 }
+
+.home-page {
+  background: #f8fafc;
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  min-height: 100vh;
+}
+
+.home-left-rail {
+  align-items: center;
+  background: #f1f5f9;
+  border-right: 1px solid #dbe4ef;
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem 0.6rem;
+}
+
+.home-rail-create {
+  background: linear-gradient(135deg, #7c3aed, #2563eb);
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  padding: 0.7rem;
+}
+
+.home-rail-item {
+  font-size: 0.8rem;
+}
+
+.home-main {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1.5rem 2rem;
+}
+
+.home-hero {
+  background: linear-gradient(180deg, #99f6e4, #e9d5ff 42%, #ffffff 78%);
+  border: 1px solid #dbe4ef;
+  border-radius: 18px;
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  padding: 2rem 1rem 1.7rem;
+}
+
+.home-hero h1 {
+  color: #334155;
+  font-size: 3rem;
+  margin: 0;
+}
+
+.home-chip-row {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.home-chip {
+  border-radius: 999px;
+}
+
+.home-chip.active {
+  border-color: #8b5cf6;
+}
+
+.home-search {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #a5b4fc;
+  border-radius: 999px;
+  color: #64748b;
+  display: flex;
+  height: 70px;
+  max-width: 900px;
+  padding: 0 2rem;
+  width: 100%;
+}
+
+.home-category-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: 100%;
+}
+
+.home-category {
+  background: #ffffff;
+  border: 1px solid #dbe4ef;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.7rem;
+}
+
+.home-section-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.home-section-header h2 {
+  margin: 0;
+}
+
+.home-design-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.home-design-card {
+  background: #ffffff;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+}
+
+.home-design-preview {
+  align-items: center;
+  background: linear-gradient(135deg, #e2e8f0, #dbeafe);
+  display: flex;
+  font-size: 1.3rem;
+  font-weight: 700;
+  height: 140px;
+  justify-content: center;
+}
+
+.home-design-card p {
+  margin: 0;
+  padding: 0.6rem;
+}
