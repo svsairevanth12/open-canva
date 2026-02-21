@@ -13,9 +13,30 @@ import {
   useState
 } from 'react';
 
+import {
+  addCircleObject,
+  addImageObjectFromFile,
+  addRectObject,
+  addTextObject,
+  addTriangleObject
+} from '../../services/canvasObjectService';
+import {
+  exportCanvasToPngBlob,
+  exportCanvasToSvg,
+  triggerDownload
+} from '../../services/exportService';
 import { importSvgToGroup } from '../../services/svgImportService';
-import type { EditorSelection } from '../../types/editor';
+import type {
+  CanvasActions,
+  EditorSelection,
+  EditorStatus
+} from '../../types/editor';
 import { buildErrorNotification } from '../../utils/notifications';
+
+type CanvasEditorProps = {
+  onActionsChange: (actions: CanvasActions | null) => void;
+  onStatusChange: (status: EditorStatus) => void;
+};
 
 const EMPTY_SELECTION: EditorSelection = {
   activeGroup: null,
@@ -23,16 +44,15 @@ const EMPTY_SELECTION: EditorSelection = {
   isEditingGroup: false
 };
 
-function CanvasEditor(): JSX.Element {
+function CanvasEditor(props: CanvasEditorProps): JSX.Element {
   /**
-   * var: none
-   * type: void
-   * desc: Renders canvas controls, orchestrates Fabric selection, grouping, and import behaviors.
+   * var: props
+   * type: CanvasEditorProps
+   * desc: Canvas action registration and status update callbacks.
    */
   const canvasElementRef = useRef<HTMLCanvasElement | null>(null);
   const fabricCanvasRef = useRef<Canvas | null>(null);
   const [selection, setSelection] = useState<EditorSelection>(EMPTY_SELECTION);
-  const [notification, setNotification] = useState<string>('');
 
   const updateSelectionFromActiveObject = useCallback((activeObject: FabricObject | null): void => {
     /**
@@ -52,7 +72,7 @@ function CanvasEditor(): JSX.Element {
     /**
      * var: none
      * type: void
-     * desc: Synchronizes local selection state from the current Fabric active object.
+     * desc: Synchronizes local selection state from current Fabric active object.
      */
     const canvas = fabricCanvasRef.current;
     updateSelectionFromActiveObject((canvas?.getActiveObject() as FabricObject | null) ?? null);
@@ -62,9 +82,134 @@ function CanvasEditor(): JSX.Element {
     /**
      * var: none
      * type: void
-     * desc: Clears selected object/group state.
+     * desc: Clears selected object and group state.
      */
     setSelection(EMPTY_SELECTION);
+  }, []);
+
+  const removeSelection = useCallback((): void => {
+    /**
+     * var: none
+     * type: void
+     * desc: Removes the active selected object or group from canvas.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas || !selection.activeObject) {
+      return;
+    }
+    canvas.remove(selection.activeObject);
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    resetSelection();
+  }, [resetSelection, selection.activeObject]);
+
+  const moveSelection = useCallback((deltaX: number, deltaY: number): void => {
+    /**
+     * var: deltaX
+     * type: number
+     * desc: Horizontal movement offset for active object.
+     * var: deltaY
+     * type: number
+     * desc: Vertical movement offset for active object.
+     */
+    const canvas = fabricCanvasRef.current;
+    const activeObject = selection.activeObject;
+    if (!canvas || !activeObject) {
+      return;
+    }
+    activeObject.set({
+      left: (activeObject.left ?? 0) + deltaX,
+      top: (activeObject.top ?? 0) + deltaY
+    });
+    activeObject.setCoords();
+    canvas.requestRenderAll();
+  }, [selection.activeObject]);
+
+  const enterGroupEditMode = useCallback((): void => {
+    /**
+     * var: none
+     * type: void
+     * desc: Focuses first child of selected group for child-level editing.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas || !selection.activeGroup) {
+      return;
+    }
+    const child = selection.activeGroup.getObjects()[0] ?? null;
+    if (!child) {
+      props.onStatusChange({
+        message: buildErrorNotification('Malformed group structure: no editable child elements.'),
+        state: 'error'
+      });
+      return;
+    }
+    canvas.setActiveObject(child);
+    updateSelectionFromActiveObject(child);
+    canvas.requestRenderAll();
+  }, [props, selection.activeGroup, updateSelectionFromActiveObject]);
+
+  const exitGroupEditMode = useCallback((): void => {
+    /**
+     * var: none
+     * type: void
+     * desc: Restores selected group focus from child-level editing mode.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas || !selection.activeGroup) {
+      return;
+    }
+    canvas.setActiveObject(selection.activeGroup);
+    updateSelectionFromActiveObject(selection.activeGroup);
+    canvas.requestRenderAll();
+  }, [selection.activeGroup, updateSelectionFromActiveObject]);
+
+  const importSvgFromFile = useCallback(async (file: File): Promise<void> => {
+    /**
+     * var: file
+     * type: File
+     * desc: Uploaded SVG file payload to import into canvas.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      throw new Error('Canvas is not initialized.');
+    }
+    const svgPayload = await file.text();
+    const importedResult = await importSvgToGroup(svgPayload);
+    canvas.add(importedResult.rootGroup);
+    canvas.setActiveObject(importedResult.rootGroup);
+    updateSelectionFromActiveObject(importedResult.rootGroup);
+    canvas.requestRenderAll();
+  }, [updateSelectionFromActiveObject]);
+
+  const exportSvg = useCallback(async (): Promise<void> => {
+    /**
+     * var: none
+     * type: void
+     * desc: Serializes canvas into SVG and triggers file download.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      throw new Error('Canvas is not initialized.');
+    }
+    const svgString = exportCanvasToSvg(canvas);
+    const svgBlob = new Blob([svgString], {
+      type: 'image/svg+xml'
+    });
+    triggerDownload(svgBlob, 'open-canva-export.svg');
+  }, []);
+
+  const exportPng = useCallback(async (): Promise<void> => {
+    /**
+     * var: none
+     * type: void
+     * desc: Serializes canvas into PNG and triggers file download.
+     */
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      throw new Error('Canvas is not initialized.');
+    }
+    const pngBlob = exportCanvasToPngBlob(canvas);
+    triggerDownload(pngBlob, 'open-canva-export.png');
   }, []);
 
   useEffect(() => {
@@ -99,114 +244,68 @@ function CanvasEditor(): JSX.Element {
     return () => {
       canvas.dispose();
       fabricCanvasRef.current = null;
+      props.onActionsChange(null);
     };
-  }, [handleSelectionEvent, resetSelection, updateSelectionFromActiveObject]);
+  }, [handleSelectionEvent, props, resetSelection, updateSelectionFromActiveObject]);
 
-  const handleSvgImport = useCallback(async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    const actions: CanvasActions = {
+      addCircle: () => addCircleObject(canvas),
+      addImageFromFile: (file: File) => addImageObjectFromFile(canvas, file),
+      addRect: () => addRectObject(canvas),
+      addText: () => addTextObject(canvas),
+      addTriangle: () => addTriangleObject(canvas),
+      enterGroupEditMode,
+      exitGroupEditMode,
+      exportPng,
+      exportSvg,
+      importSvgFromFile,
+      moveSelection,
+      removeSelection,
+      selection: () => selection
+    };
+    props.onActionsChange(actions);
+  }, [enterGroupEditMode, exitGroupEditMode, exportPng, exportSvg, importSvgFromFile, moveSelection, props, removeSelection, selection]);
+
+  const handleSvgImportInput = useCallback(async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     /**
      * var: event
      * type: ChangeEvent<HTMLInputElement>
-     * desc: Input change event carrying uploaded SVG file data.
+     * desc: File input event for importing SVG assets.
      */
-    const canvas = fabricCanvasRef.current;
     const file = event.target.files?.[0] ?? null;
-    if (!canvas || !file) {
+    if (!file) {
       return;
     }
+    props.onStatusChange({
+      message: 'Importing SVG...',
+      state: 'loading'
+    });
     try {
-      const svgPayload = await file.text();
-      const importedResult = await importSvgToGroup(svgPayload);
-      canvas.add(importedResult.rootGroup);
-      canvas.setActiveObject(importedResult.rootGroup);
-      updateSelectionFromActiveObject(importedResult.rootGroup);
-      canvas.requestRenderAll();
-      setNotification('SVG imported successfully.');
+      await importSvgFromFile(file);
+      props.onStatusChange({
+        message: 'SVG imported successfully.',
+        state: 'success'
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown SVG import error.';
-      setNotification(buildErrorNotification(message));
+      props.onStatusChange({
+        message: buildErrorNotification(error instanceof Error ? error.message : 'Unknown SVG import error.'),
+        state: 'error'
+      });
     } finally {
       event.target.value = '';
     }
-  }, [updateSelectionFromActiveObject]);
-
-  const enterGroupEditMode = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Activates the first child object in the selected group for granular editing.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !selection.activeGroup) {
-      return;
-    }
-    const child = selection.activeGroup.getObjects()[0] ?? null;
-    if (!child) {
-      setNotification(buildErrorNotification('Malformed group structure: no editable child elements.'));
-      return;
-    }
-    canvas.setActiveObject(child);
-    updateSelectionFromActiveObject(child);
-    canvas.requestRenderAll();
-  }, [selection.activeGroup, updateSelectionFromActiveObject]);
-
-  const exitGroupEditMode = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Restores group selection after child-level editing.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !selection.activeGroup) {
-      return;
-    }
-    canvas.setActiveObject(selection.activeGroup);
-    updateSelectionFromActiveObject(selection.activeGroup);
-    canvas.requestRenderAll();
-  }, [selection.activeGroup, updateSelectionFromActiveObject]);
-
-  const deleteSelection = useCallback((): void => {
-    /**
-     * var: none
-     * type: void
-     * desc: Deletes either the selected child object or the selected group from the canvas.
-     */
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !selection.activeObject) {
-      return;
-    }
-    canvas.remove(selection.activeObject);
-    canvas.discardActiveObject();
-    canvas.requestRenderAll();
-    resetSelection();
-  }, [resetSelection, selection.activeObject]);
-
-  const nudgeSelection = useCallback((deltaX: number, deltaY: number): void => {
-    /**
-     * var: deltaX
-     * type: number
-     * desc: Horizontal movement offset applied to the selected object.
-     * var: deltaY
-     * type: number
-     * desc: Vertical movement offset applied to the selected object.
-     */
-    const canvas = fabricCanvasRef.current;
-    const active = selection.activeObject;
-    if (!canvas || !active) {
-      return;
-    }
-    active.set({
-      left: (active.left ?? 0) + deltaX,
-      top: (active.top ?? 0) + deltaY
-    });
-    active.setCoords();
-    canvas.requestRenderAll();
-  }, [selection.activeObject]);
+  }, [importSvgFromFile, props]);
 
   const selectionLabel = useMemo((): string => {
     /**
      * var: none
      * type: void
-     * desc: Builds compact status text describing current selection and edit mode.
+     * desc: Generates textual summary of current selection state.
      */
     if (!selection.activeObject) {
       return 'No selection';
@@ -223,17 +322,16 @@ function CanvasEditor(): JSX.Element {
   return (
     <section className="editor-panel">
       <div className="editor-toolbar">
-        <input accept=".svg,image/svg+xml" onChange={handleSvgImport} type="file" />
+        <input accept=".svg,image/svg+xml" onChange={handleSvgImportInput} type="file" />
         <button disabled={!selection.activeGroup || selection.isEditingGroup} onClick={enterGroupEditMode} type="button">Edit group</button>
         <button disabled={!selection.activeGroup || !selection.isEditingGroup} onClick={exitGroupEditMode} type="button">Exit edit</button>
-        <button disabled={!selection.activeObject} onClick={deleteSelection} type="button">Delete</button>
-        <button disabled={!selection.activeObject} onClick={() => nudgeSelection(-10, 0)} type="button">←</button>
-        <button disabled={!selection.activeObject} onClick={() => nudgeSelection(10, 0)} type="button">→</button>
-        <button disabled={!selection.activeObject} onClick={() => nudgeSelection(0, -10)} type="button">↑</button>
-        <button disabled={!selection.activeObject} onClick={() => nudgeSelection(0, 10)} type="button">↓</button>
+        <button disabled={!selection.activeObject} onClick={removeSelection} type="button">Delete</button>
+        <button disabled={!selection.activeObject} onClick={() => moveSelection(-10, 0)} type="button">←</button>
+        <button disabled={!selection.activeObject} onClick={() => moveSelection(10, 0)} type="button">→</button>
+        <button disabled={!selection.activeObject} onClick={() => moveSelection(0, -10)} type="button">↑</button>
+        <button disabled={!selection.activeObject} onClick={() => moveSelection(0, 10)} type="button">↓</button>
       </div>
       <p className="editor-status">{selectionLabel}</p>
-      <p aria-live="polite" className="editor-notification">{notification}</p>
       <canvas ref={canvasElementRef} />
     </section>
   );

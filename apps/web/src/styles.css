@@ -10,8 +10,27 @@ body {
 
 .layout {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   min-height: 100vh;
+}
+
+.status-banner {
+  background: #0b1220;
+  border-bottom: 1px solid #374151;
+  font-size: 0.95rem;
+  padding: 0.5rem 1rem;
+}
+
+.status-banner[data-state='error'] {
+  color: #fca5a5;
+}
+
+.status-banner[data-state='loading'] {
+  color: #fcd34d;
+}
+
+.status-banner[data-state='success'] {
+  color: #86efac;
 }
 
 .content {
@@ -29,6 +48,12 @@ body {
 .toolbar {
   background: #1f2937;
   border-bottom: 1px solid #374151;
+}
+
+.toolbar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .sidebar {
@@ -52,6 +77,10 @@ body {
 .editor-notification {
   margin: 0;
   min-height: 1.25rem;
+}
+
+.error-boundary {
+  padding: 2rem;
 }
 
 button,
