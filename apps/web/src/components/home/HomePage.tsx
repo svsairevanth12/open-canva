@@ -6,6 +6,7 @@ import {
   useState
 } from 'react';
 
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import type { StoredDesign } from '../../types/editor';
 
 type TemplateDescriptor = {
@@ -47,6 +48,7 @@ function HomePage(props: HomePageProps): JSX.Element {
   const uploadInputRef: RefObject<HTMLInputElement> = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState<string>('');
   const [tab, setTab] = useState<'recent' | 'templates'>('recent');
+  const debouncedQuery = useDebouncedValue(query, 180);
 
   const filteredDesigns = useMemo((): StoredDesign[] => {
     /**
@@ -54,8 +56,8 @@ function HomePage(props: HomePageProps): JSX.Element {
      * type: void
      * desc: Filters stored design cards using active home search query.
      */
-    return props.designs.filter((design) => design.name.toLowerCase().includes(query.toLowerCase()));
-  }, [props.designs, query]);
+    return props.designs.filter((design) => design.name.toLowerCase().includes(debouncedQuery.toLowerCase()));
+  }, [debouncedQuery, props.designs]);
 
   const filteredTemplates = useMemo((): TemplateDescriptor[] => {
     /**
@@ -63,8 +65,8 @@ function HomePage(props: HomePageProps): JSX.Element {
      * type: void
      * desc: Filters template cards using active home search query.
      */
-    return props.templates.filter((template) => template.name.toLowerCase().includes(query.toLowerCase()));
-  }, [props.templates, query]);
+    return props.templates.filter((template) => template.name.toLowerCase().includes(debouncedQuery.toLowerCase()));
+  }, [debouncedQuery, props.templates]);
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     /**
@@ -116,12 +118,14 @@ function HomePage(props: HomePageProps): JSX.Element {
               <p>{design.name}</p>
             </button>
           ))}
+          {tab === 'recent' && filteredDesigns.length === 0 && <div className="home-empty">No designs found for this query.</div>}
           {tab === 'templates' && filteredTemplates.map((template) => (
             <button className="home-design-card" key={template.id} onClick={() => props.onOpenTemplate(template.id)} type="button">
               <div className="home-design-preview">{template.category}</div>
               <p>{template.name}</p>
             </button>
           ))}
+          {tab === 'templates' && filteredTemplates.length === 0 && <div className="home-empty">No templates found for this query.</div>}
         </div>
       </div>
     </section>

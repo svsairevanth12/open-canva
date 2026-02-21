@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useMemo,
+  useState
+} from 'react';
 
 import ErrorBoundary from './components/common/ErrorBoundary';
-import CanvasEditor from './components/editor/CanvasEditor';
 import HomePage from './components/home/HomePage';
-import LayersPanel from './components/sidebar/LayersPanel';
-import PropertiesPanel from './components/sidebar/PropertiesPanel';
-import Sidebar from './components/sidebar/Sidebar';
-import Toolbar from './components/toolbar/Toolbar';
 import { openProjectById } from './services/projectService';
 import { buildTemplateProject, listTemplates } from './services/templateService';
 import type {
@@ -40,6 +40,14 @@ const DEFAULT_SNAPSHOT: EditorSnapshot = {
 };
 
 const STORED_DESIGNS_KEY = 'open-canva-designs';
+
+
+const CanvasEditor = lazy(() => import('./components/editor/CanvasEditor'));
+const LayersPanel = lazy(() => import('./components/sidebar/LayersPanel'));
+const PropertiesPanel = lazy(() => import('./components/sidebar/PropertiesPanel'));
+const Sidebar = lazy(() => import('./components/sidebar/Sidebar'));
+const Toolbar = lazy(() => import('./components/toolbar/Toolbar'));
+
 
 function loadStoredDesigns(): StoredDesign[] {
   /**
@@ -106,6 +114,7 @@ function App(): JSX.Element {
   const [view, setView] = useState<'editor' | 'home'>('home');
   const [designs, setDesigns] = useState<StoredDesign[]>(() => loadStoredDesigns());
   const [activeDesignId, setActiveDesignId] = useState<string | null>(null);
+  const templates = useMemo(() => listTemplates(), []);
 
   const activeDesign = useMemo((): StoredDesign | null => {
     /**
@@ -207,7 +216,7 @@ function App(): JSX.Element {
           onOpenDesign={handleOpenDesign}
           onOpenTemplate={handleOpenTemplate}
           onUploadAsset={handleUploadAsset}
-          templates={listTemplates()}
+          templates={templates}
         />
       </ErrorBoundary>
     );
@@ -215,18 +224,20 @@ function App(): JSX.Element {
 
   return (
     <ErrorBoundary>
-      <div className="layout">
-        <Toolbar actions={actions} onGoHome={() => setView('home')} onStatusChange={setStatus} />
-        <div className="status-banner" data-state={status.state}>{status.message}</div>
-        <div className="content">
-          <Sidebar />
-          <CanvasEditor initialDesign={activeDesign} onActionsChange={setActions} onSnapshotChange={setSnapshot} onStatusChange={setStatus} />
-          <div className="right-column">
-            <PropertiesPanel actions={actions} snapshot={snapshot} />
-            <LayersPanel actions={actions} snapshot={snapshot} />
+      <Suspense fallback={<section className="app-loading">Loading editor workspace...</section>}>
+        <div className="layout">
+          <Toolbar actions={actions} onGoHome={() => setView('home')} onStatusChange={setStatus} />
+          <div className="status-banner" data-state={status.state}>{status.message}</div>
+          <div className="content">
+            <Sidebar />
+            <CanvasEditor initialDesign={activeDesign} onActionsChange={setActions} onSnapshotChange={setSnapshot} onStatusChange={setStatus} />
+            <div className="right-column">
+              <PropertiesPanel actions={actions} snapshot={snapshot} />
+              <LayersPanel actions={actions} snapshot={snapshot} />
+            </div>
           </div>
         </div>
-      </div>
+      </Suspense>
     </ErrorBoundary>
   );
 }
