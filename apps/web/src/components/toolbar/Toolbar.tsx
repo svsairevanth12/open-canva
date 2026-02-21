@@ -123,9 +123,10 @@ function Toolbar(props: ToolbarProps): JSX.Element {
         <button onClick={() => runSyncAction(() => props.actions?.addCircle(), 'Circle added.')} type="button">Circle</button>
         <button onClick={() => runSyncAction(() => props.actions?.addTriangle(), 'Triangle added.')} type="button">Triangle</button>
         <button onClick={() => imageInputRef.current?.click()} type="button">Image</button>
+        <button onClick={() => runAsyncAction(() => props.actions?.removeBackgroundFromActiveImage() ?? Promise.resolve(), 'Removing background...', 'Background removed.')} type="button">Remove BG</button>
+        <button onClick={() => runAsyncAction(() => props.actions?.duplicateSelection() ?? Promise.resolve(), 'Duplicating...', 'Duplicated selection.')} type="button">Duplicate</button>
         <button onClick={() => runAsyncAction(() => props.actions?.exportSvg() ?? Promise.resolve(), 'Exporting SVG...', 'SVG exported.')} type="button">Export SVG</button>
         <button onClick={() => runAsyncAction(() => props.actions?.exportPng() ?? Promise.resolve(), 'Exporting PNG...', 'PNG exported.')} type="button">Export PNG</button>
-        <button className="button-primary" onClick={() => runSyncAction(() => props.actions?.addRect(), 'New page layer added.')} type="button">Add Page</button>
       </div>
       <input accept=".svg,image/svg+xml" hidden onChange={handleSvgInput} ref={svgInputRef} type="file" />
       <input accept="image/*" hidden onChange={handleImageInput} ref={imageInputRef} type="file" />

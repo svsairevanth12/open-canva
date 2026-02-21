@@ -2,26 +2,31 @@ function Sidebar(): JSX.Element {
   /**
    * var: none
    * type: void
-   * desc: Renders left-side panel with quick guidance and editing flow details.
+   * desc: Renders Canva-style left navigation and template previews.
    */
   return (
     <aside className="sidebar">
-      <h3>Design Panel</h3>
-      <div className="sidebar-card">
-        <h4>Getting Started</h4>
-        <ol>
-          <li>Click <strong>Upload SVG</strong> in the top bar.</li>
-          <li>Select objects on the canvas to move or delete.</li>
-          <li>Use Text, Shapes, and Image buttons to build designs.</li>
-          <li>Export your work as SVG or PNG.</li>
-        </ol>
+      <div className="sidebar-nav">
+        <button className="sidebar-nav-item" type="button">Templates</button>
+        <button className="sidebar-nav-item" type="button">Elements</button>
+        <button className="sidebar-nav-item" type="button">Text</button>
+        <button className="sidebar-nav-item" type="button">Brand</button>
+        <button className="sidebar-nav-item" type="button">Uploads</button>
+        <button className="sidebar-nav-item" type="button">Tools</button>
+        <button className="sidebar-nav-item" type="button">Projects</button>
+        <button className="sidebar-nav-item" type="button">Apps</button>
       </div>
-      <div className="sidebar-card">
-        <h4>Canvas Tips</h4>
+      <div className="sidebar-content">
+        <h3>Quick Templates</h3>
+        <div className="template-card">Instagram Post · 1080 × 1080</div>
+        <div className="template-card">Presentation · 1920 × 1080</div>
+        <div className="template-card">Story · 1080 × 1920</div>
+        <h3>Quick Start</h3>
         <ul>
-          <li>Drag and drop SVG or image files directly on the canvas.</li>
-          <li>Use arrow controls to nudge selected elements.</li>
-          <li>Use Edit Group to tweak imported SVG group children.</li>
+          <li>Upload an SVG from the top bar or canvas button.</li>
+          <li>Use the right panel to edit text styles and object colors.</li>
+          <li>Use layer controls to bring items front/back and lock them.</li>
+          <li>Export to SVG or PNG anytime.</li>
         </ul>
       </div>
     </aside>
